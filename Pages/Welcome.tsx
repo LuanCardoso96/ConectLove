@@ -183,7 +183,7 @@ export default function WelcomePage({ navigation }: WelcomePageProps) {
       if (!validateForm()) {
         // foco nos erros
         const firstError = Object.values(errors)[0];
-        if (firstError) AccessibilityInfo.announceForAccessibility?.(firstError);
+        if (firstError) AccessibilityInfo.announceForAccessibility?.(firstError as string);
         return;
       }
 

@@ -441,8 +441,8 @@ function CardBottom({ profile }: { profile: Profile }) {
           {profile.interests?.slice(0, 3).map((it, i) => (
             <View key={`${it}-${i}`} style={styles.tag}>
               <Text style={styles.tagText}>{it}</Text>
-              </View>
-            ))}
+            </View>
+          ))}
         </View>
       </View>
     </View>

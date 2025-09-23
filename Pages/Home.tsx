@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { ProfileEntity, LikeEntity, MatchEntity, UserEntity, Profile } from '../Entities';
+import { LikeEntity, MatchEntity, UserEntity, Profile } from '../Entities';
 
 const { width, height } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.9;
@@ -22,20 +22,31 @@ const LIKE_LIMITS = { Free: { Masculino: 20, Feminino: 40, Outro: 30 }, Premium:
 const generateMockProfiles = () => {
   const profiles: Profile[] = [];
   const genders: ('Feminino' | 'Masculino')[] = ['Feminino', 'Masculino'];
+  const names = {
+    Feminino: ['Ana', 'Maria', 'Sofia', 'Julia', 'Camila', 'Beatriz', 'Larissa', 'Fernanda', 'Gabriela', 'Isabella'],
+    Masculino: ['Carlos', 'João', 'Pedro', 'Lucas', 'Mateus', 'Rafael', 'Diego', 'Bruno', 'Felipe', 'Thiago']
+  };
+  
+  // Generate unique profiles each time using timestamp
+  const timestamp = Date.now();
+  
   for (let i = 1; i <= 50; i++) {
     const gender = genders[i % 2];
+    const nameList = names[gender];
+    const name = nameList[(i + Math.floor(timestamp / 1000)) % nameList.length];
+    
     profiles.push({
-      id: `mock_${i}`,
-      name: `${gender === 'Feminino' ? 'Ana' : 'Carlos'} ${i}`,
+      id: `mock_${timestamp}_${i}`,
+      name: `${name} ${i}`,
       age: 20 + (i % 15),
       bio: `Apaixonado(a) por viagens e boa comida. Buscando conexões reais. #${i}`,
-      photos: [`https://i.pravatar.cc/500?u=user${i}`],
+      photos: [`https://i.pravatar.cc/500?u=${timestamp}_${i}`],
       interests: ['Viagem', 'Cozinhar', 'Filmes'].slice(0, 1 + (i % 3)),
       gender: gender,
       seeking: gender === 'Feminino' ? 'Masculino' : 'Feminino',
       location_mock: `${i * 2}km de distância`,
       is_verified: i % 5 === 0,
-      user_email: `user${i}@example.com`
+      user_email: `user${timestamp}_${i}@example.com`
     });
   }
   return profiles;
@@ -46,7 +57,7 @@ interface HomePageProps {
   route?: any;
 }
 
-export default function HomePage({ navigation, route }: HomePageProps) {
+export default function HomePage({ route }: HomePageProps) {
   const { currentUser, profile } = route?.params || {};
   
   // Debug: Log dos dados recebidos
@@ -85,7 +96,7 @@ export default function HomePage({ navigation, route }: HomePageProps) {
       const maxLikes = typeof planLimits === 'object' ? planLimits[profile.gender as keyof typeof planLimits] : planLimits;
       setLikesLeft(maxLikes - userLikes);
 
-      // Use mock data directly for now
+      // Generate fresh mock data each time
       const mockProfiles = generateMockProfiles();
       const filteredProfiles = mockProfiles.filter(p => p.user_email !== currentUser?.email);
       

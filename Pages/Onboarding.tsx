@@ -111,7 +111,7 @@ export default function OnboardingPage({ navigation, route }: OnboardingPageProp
       await UserEntity.updateMyUserData({ gender: formData.gender });
       
       Alert.alert('Sucesso', 'Perfil criado com sucesso!', [
-        { text: 'OK', onPress: () => navigation?.navigate('Home') }
+        { text: 'OK', onPress: () => navigation?.navigate('Main') }
       ]);
     } catch (error) {
       Alert.alert('Erro', 'Erro ao criar perfil. Tente novamente.');

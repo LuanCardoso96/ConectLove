@@ -1,27 +1,25 @@
-/**
- * ConectLove - App de Encontros
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
 import React from 'react';
-import { StatusBar, useColorScheme } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import Navigation from './Navigation';
+import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
+import RootNavigator from './src/navigation/RootNavigator';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+const theme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: '#fef7f7',
+    primary: '#e91e63',
+    secondary: '#ff6b9d',
+    accent: '#ff4081',
+    surface: '#ffffff',
+    text: '#2d3748',
+    border: '#e91e63',
+  },
+};
 
+export default function App() {
   return (
-    <SafeAreaProvider>
-      <StatusBar 
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'} 
-        backgroundColor="#EC4899"
-      />
-      <Navigation />
-    </SafeAreaProvider>
+    <NavigationContainer theme={theme}>
+      <RootNavigator />
+    </NavigationContainer>
   );
 }
-
-export default App;

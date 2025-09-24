@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Easing,
   Alert,
   AccessibilityInfo,
+  ImageStyle,
 } from 'react-native';
 import { LikeEntity, MatchEntity, UserEntity, Profile } from '../Entities';
 
@@ -27,37 +28,53 @@ const LIKE_LIMITS = {
   Diamante: 500,
 } as const;
 
+// Gêneros compatíveis com a interface Profile
+const GENDERS = ['Feminino', 'Masculino', 'Outro'] as const;
+type Gender = typeof GENDERS[number];
+
 interface HomePageProps {
   navigation?: any;
-  route?: { params?: { currentUser?: any; profile?: Profile } };
+  route?: { params?: { currentUser ?: any; profile?: Profile; seeking?: ('Masculino' | 'Feminino' | 'Ambos')[] } };
 }
 
-/** ---------- Mock de perfis (mantido e melhorado) ---------- */
+/** ---------- Mock de perfis (melhorado com mais gêneros para inclusão) ---------- */
 const generateMockProfiles = (): Profile[] => {
   const profiles: Profile[] = [];
-  const genders: ('Feminino' | 'Masculino')[] = ['Feminino', 'Masculino'];
-  const names = {
+  const names: Record<Gender, string[]> = {
     Feminino: ['Ana', 'Maria', 'Sofia', 'Julia', 'Camila', 'Beatriz', 'Larissa', 'Fernanda', 'Gabriela', 'Isabella'],
     Masculino: ['Carlos', 'João', 'Pedro', 'Lucas', 'Mateus', 'Rafael', 'Diego', 'Bruno', 'Felipe', 'Thiago'],
+    Outro: ['Alex', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan', 'Quinn', 'Avery', 'Jamie', 'Cameron'],
   };
+  const bios = [
+    'Apaixonado(a) por viagens e boa comida. Buscando conexões reais.',
+    'Amante de livros e café. Vamos conversar sobre o universo?',
+    'Aventureiro(a) e fã de esportes. Procuro alguém para compartilhar risadas.',
+    'Artista de coração. Música e criatividade são minha vibe.',
+    'Gamer e cinéfilo(a). Match perfeito para maratonas noturnas.',
+  ];
+  const interestsBase = ['Viagem', 'Cozinhar', 'Filmes', 'Pets', 'Música', 'Livros', 'Esportes', 'Arte', 'Games'];
   const timestamp = Date.now();
 
   for (let i = 1; i <= 50; i++) {
-    const gender = genders[i % 2];
+    const gender = GENDERS[Math.floor(Math.random() * GENDERS.length)] as Gender;
     const nameList = names[gender];
-    const name = nameList[(i + Math.floor(timestamp / 1000)) % nameList.length];
+    const name = nameList[Math.floor(Math.random() * nameList.length)];
+
+    // Seeking compatível com interface Profile
+    const seekingOptions: ('Masculino' | 'Feminino' | 'Ambos')[] = ['Masculino', 'Feminino', 'Ambos'];
+    const seeking = seekingOptions[Math.floor(Math.random() * seekingOptions.length)];
 
     profiles.push({
       id: `mock_${timestamp}_${i}`,
       name: `${name} ${i}`,
-      age: 20 + (i % 15),
-      bio: `Apaixonado(a) por viagens e boa comida. Buscando conexões reais. #${i}`,
+      age: 18 + Math.floor(Math.random() * 25), // Idade mais realista (18-42)
+      bio: `${bios[Math.floor(Math.random() * bios.length)]} #${i}`,
       photos: [`https://i.pravatar.cc/800?u=${timestamp}_${i}`],
-      interests: ['Viagem', 'Cozinhar', 'Filmes', 'Pets', 'Música'].slice(0, 1 + (i % 4)),
+      interests: interestsBase.sort(() => 0.5 - Math.random()).slice(0, 2 + Math.floor(Math.random() * 3)),
       gender,
-      seeking: gender === 'Feminino' ? 'Masculino' : 'Feminino',
-      location_mock: `${i * 2} km de distância`,
-      is_verified: i % 5 === 0,
+      seeking: seeking,
+      location_mock: `${Math.floor(Math.random() * 50) + 1} km de distância`,
+      is_verified: Math.random() > 0.7, // Maior chance de verificado
       user_email: `user${timestamp}_${i}@example.com`,
     });
   }
@@ -69,7 +86,13 @@ const SWIPE_THRESHOLD = width * 0.25;
 const ROTATION = 12; // graus
 
 export default function HomePage({ route }: HomePageProps) {
-  const { currentUser, profile } = route?.params || {};
+  const { currentUser , profile } = route?.params || {};
+  // Preferências de busca: assumido como array de gêneros selecionados pelo usuário
+  // Pode vir de params ou ser gerenciado em estado global (ex: Redux/Context)
+  const userSeeking = useMemo(() => 
+    route?.params?.seeking || currentUser ?.seeking || ['Feminino', 'Masculino'] as ('Masculino' | 'Feminino' | 'Ambos')[],
+    [route?.params?.seeking, currentUser ?.seeking]
+  );
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [index, setIndex] = useState(0); // topo do deck
   const [isLoading, setIsLoading] = useState(true);
@@ -135,7 +158,7 @@ export default function HomePage({ route }: HomePageProps) {
       const plan = (user?.plan || 'Free') as keyof typeof LIKE_LIMITS;
       const planLimits = LIKE_LIMITS[plan];
 
-      // Limite por gênero do USUÁRIO (correção do seu código)
+      // Limite por gênero do USUÁRIO (agora com mais gêneros)
       const userGender = user?.gender || 'Outro';
       const maxLikes = typeof planLimits === 'number' ? planLimits : (planLimits as any)[userGender] ?? 20;
 
@@ -158,28 +181,37 @@ export default function HomePage({ route }: HomePageProps) {
     setIsLoading(true);
     try {
       // Reset likes se virou o dia
-      const { today, left } = calcLikesLeft(currentUser);
-      if (currentUser?.last_like_date !== today) {
+      const { today, left } = calcLikesLeft(currentUser );
+      if (currentUser ?.last_like_date !== today) {
         await UserEntity.updateMyUserData({ likes_today: 0, last_like_date: today });
       }
       setLikesLeft(left);
 
-      // Mock + filtro por e-mail
+      // Mock + filtro por e-mail E por preferências de gênero do usuário
       const mock = generateMockProfiles();
-      const filtered = mock.filter((p) => p.user_email !== currentUser?.email);
-      setProfiles(filtered);
+      const filteredByEmail = mock.filter((p) => p.user_email !== currentUser ?.email);
+      // Filtro principal: só mostra perfis cujo gênero está nas preferências do usuário
+      const filteredBySeeking = filteredByEmail.filter((p) => {
+        if (userSeeking.includes('Ambos')) return true;
+        return userSeeking.includes(p.gender as any);
+      });
+      setProfiles(filteredBySeeking);
       setIndex(0);
 
       // Preload próxima
-      preloadNextImage(0, filtered);
+      preloadNextImage(0, filteredBySeeking);
     } catch (e) {
       const mock = generateMockProfiles();
-      setProfiles(mock);
+      const filteredBySeeking = mock.filter((p) => {
+        if (userSeeking.includes('Ambos')) return true;
+        return userSeeking.includes(p.gender as any);
+      });
+      setProfiles(filteredBySeeking);
       setIndex(0);
     } finally {
       setIsLoading(false);
     }
-  }, [calcLikesLeft, currentUser, preloadNextImage]);
+  }, [calcLikesLeft, currentUser , preloadNextImage, userSeeking]);
 
   useEffect(() => {
     fetchProfiles();
@@ -241,7 +273,7 @@ export default function HomePage({ route }: HomePageProps) {
 
   /** --------- Lógica de like/match --------- */
   const handleSwipe = async (type: 'like' | 'pass' | 'super-like', likedProfile: Profile) => {
-    const user = currentUser;
+    const user = currentUser ;
     if (!profile || (!canSpendLike(type, user) && type !== 'pass')) {
       setFeedback('limit');
       setShowUpsell(true);
@@ -294,10 +326,10 @@ export default function HomePage({ route }: HomePageProps) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        <TopBar />
+        <TopBar onSettings={() => Alert.alert('Configurações', `Preferências atuais: ${userSeeking.join(', ')}\nAjuste em Perfil > Preferências.`)} />
         <View style={styles.loadingWrap}>
           <View style={styles.skeletonCard} />
-          <Text style={styles.loadingText}>Carregando perfis...</Text>
+          <Text style={styles.loadingText}>Carregando perfis compatíveis...</Text>
           <ActivityIndicator size="large" color="#EC4899" />
         </View>
       </SafeAreaView>
@@ -308,7 +340,7 @@ export default function HomePage({ route }: HomePageProps) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        <TopBar />
+        <TopBar onSettings={() => Alert.alert('Configurações', `Preferências atuais: ${userSeeking.join(', ')}\nAjuste em Perfil > Preferências.`)} />
         <EmptyState onReload={fetchProfiles} />
       </SafeAreaView>
     );
@@ -317,8 +349,13 @@ export default function HomePage({ route }: HomePageProps) {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <TopBar />
+      <TopBar onSettings={() => Alert.alert('Configurações', `Preferências atuais: ${userSeeking.join(', ')}\nAjuste em Perfil > Preferências.`)} />
       <View style={styles.content}>
+        {/* Indicador de preferências (opcional, para UX) */}
+        <View style={styles.preferencesIndicator}>
+          <Text style={styles.preferencesText}>Mostrando: {userSeeking.join(', ')}</Text>
+        </View>
+
         {/* Próximo cartão (abaixo, com scale/opacity) */}
         {nextProfile && (
           <Animated.View
@@ -327,7 +364,8 @@ export default function HomePage({ route }: HomePageProps) {
               styles.cardShadow,
               { transform: [{ scale: nextCardScale }], opacity: nextCardOpacity },
             ]}
-            accessible accessibilityLabel={`Próximo perfil: ${nextProfile.name}`}
+            accessible
+            accessibilityLabel={`Próximo perfil: ${nextProfile.name}, ${nextProfile.gender}`}
           >
             <CardImage uri={nextProfile.photos?.[0]} />
             <CardBottom profile={nextProfile} />
@@ -340,6 +378,7 @@ export default function HomePage({ route }: HomePageProps) {
           style={[styles.card, styles.cardShadow, topCardStyle]}
           accessibilityHint="Arraste para a direita para curtir, para a esquerda para passar"
           accessible
+          accessibilityLabel={`Perfil: ${activeProfile.name}, ${activeProfile.gender}`}
         >
           <CardImage uri={activeProfile.photos?.[0]} />
 
@@ -364,12 +403,12 @@ export default function HomePage({ route }: HomePageProps) {
         {/* Rodapé com ações */}
         <FooterActions
           likesLeft={likesLeft}
-          canBoost={currentUser?.plan === 'Diamante'}
-          canRewind={currentUser?.plan !== 'Free'}
+          canBoost={currentUser ?.plan === 'Diamante'}
+          canRewind={currentUser ?.plan !== 'Free'}
           onPass={() => forceSwipe('left')}
           onLike={() => forceSwipe('right')}
           onSuperLike={async () => {
-            if (!canSpendLike('super-like', currentUser)) {
+            if (!canSpendLike('super-like', currentUser )) {
               setFeedback('limit');
               setShowUpsell(true);
               return;
@@ -396,12 +435,14 @@ export default function HomePage({ route }: HomePageProps) {
 
 /** ---------- Subcomponentes UI ---------- */
 
-function TopBar() {
+function TopBar({ onSettings }: { onSettings?: () => void }) {
   return (
     <View style={styles.topBar}>
       <Text style={styles.brandHeart}>♥</Text>
       <Text style={styles.brand}>ConectLove</Text>
-      <View style={styles.brandSpacer} />
+      <TouchableOpacity onPress={onSettings} style={styles.settingsBtn}>
+        <Text style={styles.settingsIcon}>⚙️</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -413,55 +454,94 @@ function CardImage({ uri }: { uri?: string }) {
       {!!uri && (
         <Image
           source={{ uri }}
-          style={styles.cardImage}
-          onLoadEnd={() => setLoading(false)}
-          resizeMode="cover"
+          style={styles.cardImage as ImageStyle}
+          onLoad={() => setLoading(false)}
+          onError={() => setLoading(false)}
         />
       )}
-      {loading && <View style={styles.imageSkeleton} />}
+      {loading && (
+        <View style={styles.imageLoading}>
+          <ActivityIndicator size="small" color="#EC4899" />
+        </View>
+      )}
+    </View>
+  );
+}
+
+function EmptyState({ onReload }: { onReload: () => void }) {
+  return (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyTitle}>Nenhum perfil encontrado</Text>
+      <Text style={styles.emptySubtitle}>Tente ajustar suas preferências ou recarregar</Text>
+      <TouchableOpacity style={styles.reloadButton} onPress={onReload}>
+        <Text style={styles.reloadButtonText}>Recarregar</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 function CardBottom({ profile }: { profile: Profile }) {
   return (
-      <View style={styles.cardOverlay}>
-        <View style={styles.cardInfo}>
-        <View style={styles.nameRow}>
-          <Text style={styles.cardName}>
-            {profile.name}, {profile.age}
-          </Text>
-          {profile.is_verified && <Text style={styles.verified}>✓</Text>}
-          </View>
-          <Text style={styles.cardLocation}>{profile.location_mock}</Text>
-        <Text style={styles.cardBio} numberOfLines={2}>
-          {profile.bio}
-        </Text>
-        <View style={styles.interests}>
-          {profile.interests?.slice(0, 3).map((it, i) => (
-            <View key={`${it}-${i}`} style={styles.tag}>
-              <Text style={styles.tagText}>{it}</Text>
-            </View>
-          ))}
-        </View>
+    <View style={styles.cardBottom}>
+      <View style={styles.cardHeader}>
+        <Text style={styles.cardName}>{profile.name}</Text>
+        <Text style={styles.cardAge}>{profile.age}</Text>
+        {profile.is_verified && <Text style={styles.verifiedIcon}>✓</Text>}
       </View>
+      <Text style={styles.cardBio} numberOfLines={2}>{profile.bio}</Text>
+      <View style={styles.interestsContainer}>
+        {profile.interests.slice(0, 3).map((interest, index) => (
+          <View key={index} style={styles.interestTag}>
+            <Text style={styles.interestText}>{interest}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.locationText}>{profile.location_mock}</Text>
     </View>
   );
 }
 
-function FooterActions({
-  likesLeft,
-  canRewind,
-  canBoost,
-  onPass,
-  onLike,
-  onSuperLike,
-  onRewind,
-  onBoost,
+function Feedback({ type }: { type: 'like' | 'pass' | 'super-like' | 'match' | 'limit' }) {
+  const getFeedbackConfig = () => {
+    switch (type) {
+      case 'like':
+        return { text: 'LIKE!', color: '#4CAF50', icon: '❤️' };
+      case 'pass':
+        return { text: 'PASS', color: '#F44336', icon: '👎' };
+      case 'super-like':
+        return { text: 'SUPER LIKE!', color: '#2196F3', icon: '⭐' };
+      case 'match':
+        return { text: 'MATCH!', color: '#EC4899', icon: '🎉' };
+      case 'limit':
+        return { text: 'LIMITE ATINGIDO', color: '#FF9800', icon: '⚠️' };
+      default:
+        return { text: '', color: '#000', icon: '' };
+    }
+  };
+
+  const config = getFeedbackConfig();
+  
+  return (
+    <View style={[styles.feedbackContainer, { backgroundColor: config.color }]}>
+      <Text style={styles.feedbackIcon}>{config.icon}</Text>
+      <Text style={styles.feedbackText}>{config.text}</Text>
+    </View>
+  );
+}
+
+function FooterActions({ 
+  likesLeft, 
+  canBoost, 
+  canRewind, 
+  onPass, 
+  onLike, 
+  onSuperLike, 
+  onRewind, 
+  onBoost 
 }: {
   likesLeft: number;
-  canRewind: boolean;
   canBoost: boolean;
+  canRewind: boolean;
   onPass: () => void;
   onLike: () => void;
   onSuperLike: () => void;
@@ -469,273 +549,346 @@ function FooterActions({
   onBoost: () => void;
 }) {
   return (
-    <View style={styles.bottom}>
-      <Text style={styles.likesLabel}>
-        Likes hoje: <Text style={styles.likesNumber}>{likesLeft}</Text>
-      </Text>
-      <View style={styles.actionsRow}>
-        <ActionButton icon="↺" size="small" enabled={canRewind} onPress={onRewind} />
-        <ActionButton icon="✕" onPress={onPass} />
-        <ActionButton icon="★" color="blue" onPress={onSuperLike} />
-        <ActionButton icon="♥" onPress={onLike} />
-        <ActionButton icon="⚡" size="small" enabled={canBoost} color="purple" onPress={onBoost} />
+    <View style={styles.footerActions}>
+      <View style={styles.likesCounter}>
+        <Text style={styles.likesCounterText}>{likesLeft} likes restantes</Text>
+      </View>
+      <View style={styles.actionButtons}>
+        <TouchableOpacity style={styles.actionButton} onPress={onPass}>
+          <Text style={styles.actionButtonText}>✕</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton} onPress={onRewind} disabled={!canRewind}>
+          <Text style={[styles.actionButtonText, !canRewind && styles.disabledButton]}>↶</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton} onPress={onSuperLike}>
+          <Text style={styles.actionButtonText}>⭐</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton} onPress={onLike}>
+          <Text style={styles.actionButtonText}>❤️</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton} onPress={onBoost} disabled={!canBoost}>
+          <Text style={[styles.actionButtonText, !canBoost && styles.disabledButton]}>⚡</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
-
-function ActionButton({
-  icon, 
-  onPress, 
-  size = 'large', 
-  color = 'default', 
-  enabled = true,
-}: { 
-  icon: string; 
-  onPress: () => void; 
-  size?: 'large' | 'small'; 
-  color?: 'default' | 'blue' | 'purple'; 
-  enabled?: boolean;
-}) {
-  const s = size === 'large' ? styles.btnLg : styles.btnSm;
-  return (
-    <TouchableOpacity
-      style={[
-        s,
-        styles.btnBase,
-        color === 'blue' && styles.btnBlue,
-        color === 'purple' && styles.btnPurple,
-        !enabled && styles.btnDisabled,
-      ]}
-      onPress={onPress}
-      disabled={!enabled}
-      accessibilityRole="button"
-      accessibilityLabel={`Botão ${icon}`}
-    >
-      <Text
-        style={[
-          styles.btnIcon,
-          !enabled && styles.btnIconDisabled,
-          color === 'blue' && styles.btnIconBlue,
-          color === 'purple' && styles.btnIconPurple,
-        ]}
-      >
-        {icon}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-function Feedback({ type }: { type: 'like' | 'pass' | 'super-like' | 'match' | 'limit' }) {
-  const map = {
-    like: { label: 'LIKE', color: '#10b981' },
-    pass: { label: 'PASS', color: '#ef4444' },
-    'super-like': { label: 'SUPER LIKE', color: '#3b82f6' },
-    match: { label: 'É UM MATCH!', color: '#ec4899' },
-    limit: { label: 'LIKES ESGOTADOS', color: '#f59e0b' },
-  } as const;
-  const cfg = map[type];
-    return (
-    <View style={[styles.feedbackBox, { borderColor: cfg.color }]}>
-      <Text style={[styles.feedbackText, { color: cfg.color }]}>{cfg.label}</Text>
-      </View>
-    );
-  }
 
 function UpsellBanner({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: () => void }) {
   return (
-    <View style={styles.upsell}>
-      <Text style={styles.upsellTitle}>Acabaram seus likes por hoje</Text>
-      <Text style={styles.upsellSub}>Faça upgrade para curtir sem limites e ter mais matches!</Text>
-      <View style={styles.upsellRow}>
-        <TouchableOpacity style={[styles.upsellBtn, styles.upsellGhost]} onPress={onClose}>
-          <Text style={[styles.upsellBtnText, styles.upsellBtnTextGhost]}>Agora não</Text>
+    <View style={styles.upsellBanner}>
+      <Text style={styles.upsellTitle}>Acabaram seus likes!</Text>
+      <Text style={styles.upsellSubtitle}>Upgrade para ver mais perfis</Text>
+      <View style={styles.upsellButtons}>
+        <TouchableOpacity style={styles.upsellButton} onPress={onUpgrade}>
+          <Text style={styles.upsellButtonText}>Upgrade</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.upsellBtn, styles.upsellPrimary]} onPress={onUpgrade}>
-          <Text style={[styles.upsellBtnText, styles.upsellBtnTextPrimary]}>Ver planos</Text>
+        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <Text style={styles.closeButtonText}>✕</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-function EmptyState({ onReload }: { onReload: () => void }) {
-  return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyIcon}>♥</Text>
-      <Text style={styles.emptyTitle}>Fim da fila</Text>
-      <Text style={styles.emptyText}>
-        Você viu todos os perfis por enquanto. Tente novamente mais tarde ou ajuste seus filtros.
-      </Text>
-      <TouchableOpacity style={styles.reload} onPress={onReload}>
-        <Text style={styles.reloadText}>Recarregar</Text>
-      </TouchableOpacity>
-    </View>
-);
-}
-
-/** ---------- Estilos ---------- */
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#ffffff' },
-  topBar: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    justifyContent: 'space-between',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+  safe: {
+    flex: 1,
     backgroundColor: '#fff',
   },
-  brandHeart: { fontSize: 22, color: '#ec4899' },
-  brand: { fontSize: 18, fontWeight: '800', color: '#111827' },
-  brandSpacer: { width: 32 },
-
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  brandHeart: {
+    fontSize: 24,
+    color: '#EC4899',
+  },
+  brand: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  settingsBtn: {
+    padding: 8,
+  },
+  settingsIcon: {
+    fontSize: 20,
+  },
   content: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingHorizontal: 20,
   },
-
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 18 },
+  preferencesIndicator: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  preferencesText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   skeletonCard: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 22,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    marginBottom: 20,
   },
-  loadingText: { fontSize: 16, color: '#6b7280' },
-
-  /** Cards */
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 20,
+  },
   card: {
     position: 'absolute',
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 22,
-    overflow: 'hidden',
-    backgroundColor: '#111827',
+    borderRadius: 20,
+    backgroundColor: '#fff',
   },
   cardShadow: {
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  cardImageWrap: { flex: 1, backgroundColor: '#ddd' },
-  cardImage: { width: '100%', height: '100%' },
-  imageSkeleton: { ...StyleSheet.absoluteFillObject, backgroundColor: '#e5e7eb' },
-
-  cardOverlay: {
+  cardImageWrap: {
+    flex: 1,
+    position: 'relative',
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  } as ImageStyle,
+  imageLoading: {
     position: 'absolute',
-    left: 0, right: 0, bottom: 0,
-    padding: 16,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -10 }, { translateY: -10 }],
   },
-  cardInfo: { gap: 6 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardName: { fontSize: 24, fontWeight: '800', color: 'white' },
-  verified: { fontSize: 20, color: '#60a5fa', fontWeight: 'bold' },
-  cardLocation: { fontSize: 14, color: '#e5e7eb' },
-  cardBio: { fontSize: 14, color: '#fff' },
-  interests: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  tag: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
-  tagText: { color: 'white', fontSize: 12, fontWeight: '600' },
-
-  /** Ribbons */
+  cardBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cardName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginRight: 8,
+  },
+  cardAge: {
+    fontSize: 20,
+    color: '#fff',
+    marginRight: 8,
+  },
+  verifiedIcon: {
+    fontSize: 16,
+    color: '#4CAF50',
+  },
+  cardBio: {
+    fontSize: 16,
+    color: '#fff',
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  interestsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  interestTag: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  interestText: {
+    fontSize: 12,
+    color: '#fff',
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#fff',
+    opacity: 0.8,
+  },
   ribbon: {
     position: 'absolute',
-    top: 18,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderWidth: 4,
-    borderRadius: 8,
-    transform: [{ rotate: '-12deg' }],
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    top: 50,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    transform: [{ rotate: '-15deg' }],
   },
-  ribbonLike: { left: 14, borderColor: '#10b981' },
-  ribbonPass: { right: 14, borderColor: '#ef4444', transform: [{ rotate: '12deg' }] },
-  ribbonText: { fontSize: 20, fontWeight: '900', color: '#111827' },
-
-  /** Feedback overlay */
+  ribbonLike: {
+    backgroundColor: '#4CAF50',
+    right: 20,
+  },
+  ribbonPass: {
+    backgroundColor: '#F44336',
+    left: 20,
+  },
+  ribbonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
   feedbackOverlay: {
     position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -75 }, { translateY: -25 }],
+    zIndex: 1000,
+  },
+  feedbackContainer: {
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 25,
     alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 30,
   },
-  feedbackBox: {
-    borderWidth: 8,
-    borderRadius: 18,
-    paddingVertical: 16,
-    paddingHorizontal: 22,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+  feedbackIcon: {
+    fontSize: 24,
+    marginBottom: 5,
   },
-  feedbackText: { fontSize: 32, fontWeight: '900' },
-
-  /** Footer */
-  bottom: { position: 'absolute', bottom: 28, left: 0, right: 0, alignItems: 'center' },
-  likesLabel: { fontSize: 14, color: '#6b7280', marginBottom: 12 },
-  likesNumber: { color: '#ec4899', fontWeight: '800' },
-
-  actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', columnGap: 16 },
-  btnBase: {
-    backgroundColor: 'white',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 6,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+  feedbackText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
   },
-  btnLg: { width: 68, height: 68 },
-  btnSm: { width: 52, height: 52 },
-  btnIcon: { fontSize: 28, fontWeight: '800', color: '#6b7280' },
-  btnIconDisabled: { color: '#d1d5db' },
-  btnIconBlue: { color: '#3b82f6' },
-  btnIconPurple: { color: '#8b5cf6' },
-  btnBlue: { backgroundColor: 'white' },
-  btnPurple: { backgroundColor: 'white' },
-  btnDisabled: { opacity: 0.5 },
-
-  /** Upsell */
-  upsell: {
+  footerActions: {
     position: 'absolute',
-    left: 16, right: 16, bottom: 100,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 18,
-    elevation: 10,
+    bottom: 50,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
   },
-  upsellTitle: { fontSize: 16, fontWeight: '800', color: '#111827' },
-  upsellSub: { marginTop: 4, fontSize: 14, color: '#4b5563' },
-  upsellRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  upsellBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
-  upsellGhost: { backgroundColor: '#f3f4f6' },
-  upsellPrimary: { backgroundColor: '#ec4899' },
-  upsellBtnText: { fontWeight: '800', fontSize: 14 },
-  upsellBtnTextGhost: { color: '#111827' },
-  upsellBtnTextPrimary: { color: 'white' },
-
-  /** Empty */
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 10 },
-  emptyIcon: { fontSize: 80, color: '#d1d5db' },
-  emptyTitle: { fontSize: 22, fontWeight: '900', color: '#111827' },
-  emptyText: { fontSize: 15, color: '#6b7280', textAlign: 'center', lineHeight: 22 },
-  reload: { marginTop: 14, backgroundColor: '#ec4899', paddingHorizontal: 22, paddingVertical: 12, borderRadius: 18 },
-  reloadText: { color: 'white', fontSize: 15, fontWeight: '700' },
+  likesCounter: {
+    marginBottom: 20,
+  },
+  likesCounterText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+  },
+  actionButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  actionButtonText: {
+    fontSize: 24,
+  },
+  disabledButton: {
+    opacity: 0.3,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 30,
+    textAlign: 'center',
+  },
+  reloadButton: {
+    backgroundColor: '#EC4899',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 25,
+  },
+  reloadButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  upsellBanner: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#EC4899',
+    padding: 20,
+    alignItems: 'center',
+  },
+  upsellTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 5,
+  },
+  upsellSubtitle: {
+    fontSize: 14,
+    color: '#fff',
+    marginBottom: 15,
+  },
+  upsellButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  upsellButton: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 15,
+  },
+  upsellButtonText: {
+    color: '#EC4899',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    padding: 10,
+  },
+  closeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+  },
 });
